@@ -1,4 +1,5 @@
 const express = require("express");
+require("dotenv").config();
 const loggerMiddleware = require("./middlewares/logger");
 const authMiddleware = require("./middlewares/auth");
 const errorMiddleware = require("./middlewares/error");
@@ -19,13 +20,32 @@ const accessLogStream = fs.createWriteStream(
     { flags: 'a' }
 );
 
-// origin: "http://localhost:5173",
+// Comma-separated origins, e.g. "http://localhost:5173,https://your-app.vercel.app"
+// Use "*" (or leave unset) to reflect the requesting origin (works with Authorization).
+const corsOriginEnv = process.env.CORS_ORIGIN;
+const allowedOrigins = corsOriginEnv
+    ? corsOriginEnv.split(",").map((o) => o.trim()).filter(Boolean)
+    : [];
 
 app.use(express.json());
 app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: function (origin, callback) {
+        // Non-browser clients (Postman/curl) send no Origin
+        if (!origin) {
+            return callback(null, true);
+        }
+        if (
+            allowedOrigins.length === 0 ||
+            allowedOrigins.includes("*") ||
+            allowedOrigins.includes(origin)
+        ) {
+            return callback(null, true); // reflect request origin (not "*")
+        }
+        return callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
 }))
 app.use(morgan("dev", { stream: accessLogStream }));
 app.use(loggerMiddleware);
